@@ -3,8 +3,9 @@ import 'dart:typed_data';
 import 'note_event.dart';
 import 'spectrum_view.dart';
 
-final class AnalysisSnapshot {
-  AnalysisSnapshot({
+/// Everything the UI draws for one analysis frame.
+class AnalysisSnapshot {
+  const AnalysisSnapshot({
     required this.timestampMs,
     required this.stableNote,
     required this.detectedHz,
@@ -14,109 +15,51 @@ final class AnalysisSnapshot {
     required this.gateOpen,
     required this.gateThresholdDb,
     required this.noiseFloorDb,
-    required Float32List salienceBySemitone,
+    required this.salienceBySemitone,
     required this.salienceLowestMidi,
-    required Float32List pitchClassEnergy,
+    required this.pitchClassEnergy,
     required this.spectrum,
-  }) : salienceBySemitone = Float32List.fromList(salienceBySemitone),
-       pitchClassEnergy = _copyPitchClassEnergy(pitchClassEnergy);
+  });
 
-  factory AnalysisSnapshot.empty() => _empty;
-
-  static final AnalysisSnapshot _empty = AnalysisSnapshot(
-    timestampMs: 0,
-    stableNote: null,
-    detectedHz: null,
-    confidence: 0,
-    amplitudeLinear: 0,
-    amplitudeDb: 0,
-    gateOpen: false,
-    gateThresholdDb: 0,
-    noiseFloorDb: 0,
-    salienceBySemitone: Float32List(0),
-    salienceLowestMidi: 0,
-    pitchClassEnergy: Float32List(12),
-    spectrum: SpectrumView.empty(),
-  );
+  factory AnalysisSnapshot.empty() => AnalysisSnapshot(
+        timestampMs: 0,
+        stableNote: null,
+        detectedHz: null,
+        confidence: 0,
+        amplitudeLinear: 0,
+        amplitudeDb: -90,
+        gateOpen: false,
+        gateThresholdDb: -65,
+        noiseFloorDb: -90,
+        salienceBySemitone: Float32List(0),
+        salienceLowestMidi: 0,
+        pitchClassEnergy: Float32List(12),
+        spectrum: SpectrumView.empty(),
+      );
 
   final int timestampMs;
+
+  /// Debounced note, or null. Null means "no trustworthy note"; never a guess.
   final NoteEvent? stableNote;
+
+  /// Raw detected frequency for this frame (null if none passed the filters).
   final double? detectedHz;
+
+  /// Pitch clarity 0..1 of the latest accepted estimate (0 if none).
   final double confidence;
+
   final double amplitudeLinear;
   final double amplitudeDb;
   final bool gateOpen;
   final double gateThresholdDb;
   final double noiseFloorDb;
 
-  /// Top strip: energy per semitone, starting at [salienceLowestMidi].
+  /// Strength 0..1 per semitone, starting at MIDI [salienceLowestMidi].
   final Float32List salienceBySemitone;
   final int salienceLowestMidi;
 
-  /// Note ring: 12 values, index 0 = C.
+  /// 12 values 0..1 (C first), decayed over time.
   final Float32List pitchClassEnergy;
+
   final SpectrumView spectrum;
-
-  @override
-  bool operator ==(Object other) {
-    return other is AnalysisSnapshot &&
-        other.timestampMs == timestampMs &&
-        other.stableNote == stableNote &&
-        other.detectedHz == detectedHz &&
-        other.confidence == confidence &&
-        other.amplitudeLinear == amplitudeLinear &&
-        other.amplitudeDb == amplitudeDb &&
-        other.gateOpen == gateOpen &&
-        other.gateThresholdDb == gateThresholdDb &&
-        other.noiseFloorDb == noiseFloorDb &&
-        _float32Equals(other.salienceBySemitone, salienceBySemitone) &&
-        other.salienceLowestMidi == salienceLowestMidi &&
-        _float32Equals(other.pitchClassEnergy, pitchClassEnergy) &&
-        other.spectrum == spectrum;
-  }
-
-  @override
-  int get hashCode {
-    return Object.hash(
-      timestampMs,
-      stableNote,
-      detectedHz,
-      confidence,
-      amplitudeLinear,
-      amplitudeDb,
-      gateOpen,
-      gateThresholdDb,
-      noiseFloorDb,
-      Object.hashAll(salienceBySemitone),
-      salienceLowestMidi,
-      Object.hashAll(pitchClassEnergy),
-      spectrum,
-    );
-  }
-}
-
-Float32List _copyPitchClassEnergy(Float32List energy) {
-  if (energy.length != 12) {
-    throw ArgumentError.value(
-      energy.length,
-      'pitchClassEnergy',
-      'must contain 12 pitch-class values',
-    );
-  }
-  return Float32List.fromList(energy);
-}
-
-bool _float32Equals(Float32List a, Float32List b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
 }

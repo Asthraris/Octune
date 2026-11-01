@@ -1,7 +1,9 @@
 import 'note_name.dart';
 
-/// One detected (or recorded) note. Shared schema for live detection and persistence.
-final class NoteEvent {
+/// One detected note at one moment. The single schema shared by live
+/// detection and (later) persistence:
+/// `{"t_ms":1840,"note":"A","octave":4,"cents":-7,"amp":0.42,"conf":0.93}`
+class NoteEvent {
   const NoteEvent({
     required this.tMs,
     required this.noteName,
@@ -11,6 +13,15 @@ final class NoteEvent {
     required this.conf,
   });
 
+  factory NoteEvent.fromJson(Map<String, dynamic> json) => NoteEvent(
+        tMs: (json['t_ms'] as num).toInt(),
+        noteName: noteNameFromAscii(json['note'] as String),
+        octave: (json['octave'] as num).toInt(),
+        cents: (json['cents'] as num).toDouble(),
+        amp: (json['amp'] as num).toDouble(),
+        conf: (json['conf'] as num).toDouble(),
+      );
+
   final int tMs;
   final NoteName noteName;
   final int octave;
@@ -18,46 +29,33 @@ final class NoteEvent {
   final double amp;
   final double conf;
 
-  Map<String, Object?> toJson() {
-    return <String, Object?>{
-      't_ms': tMs,
-      'note': noteName.jsonName,
-      'octave': octave,
-      'cents': _jsonNumber(cents),
-      'amp': _jsonNumber(amp),
-      'conf': _jsonNumber(conf),
-    };
-  }
+  int get midiNumber => (octave + 1) * 12 + noteName.pitchClass;
 
-  factory NoteEvent.fromJson(Map<String, Object?> json) {
-    return NoteEvent(
-      tMs: (json['t_ms']! as num).toInt(),
-      noteName: NoteName.parse(json['note']! as String),
-      octave: (json['octave']! as num).toInt(),
-      cents: (json['cents']! as num).toDouble(),
-      amp: (json['amp']! as num).toDouble(),
-      conf: (json['conf']! as num).toDouble(),
-    );
-  }
+  static double _round(double v, int digits) =>
+      double.parse(v.toStringAsFixed(digits));
+
+  Map<String, dynamic> toJson() => {
+        't_ms': tMs,
+        'note': noteName.asciiName,
+        'octave': octave,
+        'cents': _round(cents, 1),
+        'amp': _round(amp, 3),
+        'conf': _round(conf, 3),
+      };
 
   @override
-  bool operator ==(Object other) {
-    return other is NoteEvent &&
-        other.tMs == tMs &&
-        other.noteName == noteName &&
-        other.octave == octave &&
-        other.cents == cents &&
-        other.amp == amp &&
-        other.conf == conf;
-  }
+  bool operator ==(Object other) =>
+      other is NoteEvent &&
+      other.tMs == tMs &&
+      other.noteName == noteName &&
+      other.octave == octave &&
+      other.cents == cents &&
+      other.amp == amp &&
+      other.conf == conf;
 
   @override
   int get hashCode => Object.hash(tMs, noteName, octave, cents, amp, conf);
-}
 
-Object _jsonNumber(double value) {
-  if (value == value.roundToDouble()) {
-    return value.round();
-  }
-  return value;
+  @override
+  String toString() => 'NoteEvent(${toJson()})';
 }

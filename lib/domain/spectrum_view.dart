@@ -1,64 +1,27 @@
 import 'dart:typed_data';
 
-final class SpectrumView {
-  SpectrumView({
-    required Float32List magnitudesDb,
+/// What the signal panel draws: log-spaced spectrum magnitudes plus the
+/// highest peak. [peakHz] is the loudest spectral peak, which can be a
+/// harmonic, so it need not equal the detected pitch.
+class SpectrumView {
+  const SpectrumView({
+    required this.magnitudesDb,
     required this.minHz,
     required this.maxHz,
-    required this.peakHz,
-    required this.peakDb,
-  }) : magnitudesDb = Float32List.fromList(magnitudesDb);
+    this.peakHz,
+    this.peakDb = -90,
+  });
 
-  factory SpectrumView.empty() => _empty;
+  factory SpectrumView.empty() => SpectrumView(
+        magnitudesDb: Float32List(0),
+        minHz: 50,
+        maxHz: 4000,
+      );
 
-  static final SpectrumView _empty = SpectrumView(
-    magnitudesDb: Float32List(0),
-    minHz: 0,
-    maxHz: 0,
-    peakHz: null,
-    peakDb: 0,
-  );
-
-  /// Log-spaced bin magnitudes in dB.
+  /// One value per log-spaced bin between [minHz] and [maxHz].
   final Float32List magnitudesDb;
   final double minHz;
   final double maxHz;
   final double? peakHz;
   final double peakDb;
-
-  @override
-  bool operator ==(Object other) {
-    return other is SpectrumView &&
-        _float32Equals(other.magnitudesDb, magnitudesDb) &&
-        other.minHz == minHz &&
-        other.maxHz == maxHz &&
-        other.peakHz == peakHz &&
-        other.peakDb == peakDb;
-  }
-
-  @override
-  int get hashCode {
-    return Object.hash(
-      Object.hashAll(magnitudesDb),
-      minHz,
-      maxHz,
-      peakHz,
-      peakDb,
-    );
-  }
-}
-
-bool _float32Equals(Float32List a, Float32List b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
 }

@@ -1,4 +1,4 @@
-import 'accidental_preference.dart';
+import 'note_name.dart';
 
 final class UiSettings {
   const UiSettings({

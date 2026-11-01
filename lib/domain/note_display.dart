@@ -1,4 +1,3 @@
-import 'accidental_preference.dart';
 import 'note_name.dart';
 
 /// Display spelling for a pitch class. Sharps use ♯; flats use ♭.

@@ -1,42 +1,67 @@
 import 'dart:math' as math;
 
 import 'note_name.dart';
-import 'note_reading.dart';
 
-/// Continuous MIDI number from frequency. A4 (MIDI 69) = [a4] Hz.
-///
-/// \( f = a4 \cdot 2^{(n-69)/12} \)
-double frequencyToMidi(double hz, {double a4 = 440}) {
-  if (hz <= 0 || !hz.isFinite) {
-    throw ArgumentError.value(hz, 'hz', 'must be a positive finite frequency');
+const double kStandardA4Hz = 440.0;
+const int kMidiA4 = 69;
+
+/// Fractional MIDI number of [hz]. A4 (= [a4]) is MIDI 69.
+double frequencyToMidi(double hz, {double a4 = kStandardA4Hz}) {
+  if (!(hz > 0) || !hz.isFinite) {
+    throw ArgumentError.value(hz, 'hz', 'must be positive and finite');
   }
-  if (a4 <= 0 || !a4.isFinite) {
-    throw ArgumentError.value(a4, 'a4', 'must be a positive finite frequency');
-  }
-  return 69 + (12 * (math.log(hz / a4) / math.ln2));
+  return kMidiA4 + 12 * math.log(hz / a4) / math.ln2;
 }
 
-/// Frequency in Hz for a MIDI number (may be fractional).
-double midiToFrequency(double midi, {double a4 = 440}) {
-  if (!midi.isFinite) {
-    throw ArgumentError.value(midi, 'midi', 'must be finite');
-  }
-  if (a4 <= 0 || !a4.isFinite) {
-    throw ArgumentError.value(a4, 'a4', 'must be a positive finite frequency');
-  }
-  return a4 * math.pow(2, (midi - 69) / 12);
+/// Frequency of a (possibly fractional) MIDI number.
+double midiToFrequency(double midi, {double a4 = kStandardA4Hz}) =>
+    a4 * math.pow(2, (midi - kMidiA4) / 12).toDouble();
+
+/// A pitch snapped to the nearest equal-tempered note.
+class NoteReading {
+  const NoteReading({
+    required this.noteName,
+    required this.octave,
+    required this.midiNumber,
+    required this.centsOffset,
+  });
+
+  /// Builds a reading from an integer MIDI note and a cents offset.
+  /// Octave numbering changes at C (MIDI 60 = C4).
+  factory NoteReading.fromMidi(int midi, {double cents = 0}) => NoteReading(
+        noteName: noteNameFromPitchClass(midi),
+        octave: (midi / 12).floor() - 1,
+        midiNumber: midi,
+        centsOffset: cents,
+      );
+
+  final NoteName noteName;
+  final int octave;
+  final int midiNumber;
+
+  /// Deviation from the note center, in cents (negative = flat).
+  final double centsOffset;
+
+  /// Exact (fractional) MIDI position this reading represents.
+  double get fractionalMidi => midiNumber + centsOffset / 100;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NoteReading &&
+      other.midiNumber == midiNumber &&
+      other.centsOffset == centsOffset;
+
+  @override
+  int get hashCode => Object.hash(midiNumber, centsOffset);
+
+  @override
+  String toString() =>
+      'NoteReading(${noteName.asciiName}$octave, ${centsOffset.toStringAsFixed(1)}¢)';
 }
 
-/// Nearest 12-TET note. Octave numbers change at C (C4 = MIDI 60).
-NoteReading nearestNote(double hz, {double a4 = 440}) {
-  final midiFloat = frequencyToMidi(hz, a4: a4);
-  final midiNumber = midiFloat.round();
-  final centsOffset = (midiFloat - midiNumber) * 100;
-  final octave = (midiNumber / 12).floor() - 1;
-  return NoteReading(
-    noteName: NoteName.fromMidi(midiNumber),
-    octave: octave,
-    midiNumber: midiNumber,
-    centsOffset: centsOffset,
-  );
+/// Snaps [hz] to the nearest note. [a4] is the reference tuning.
+NoteReading nearestNote(double hz, {double a4 = kStandardA4Hz}) {
+  final midi = frequencyToMidi(hz, a4: a4);
+  final rounded = midi.round();
+  return NoteReading.fromMidi(rounded, cents: (midi - rounded) * 100);
 }

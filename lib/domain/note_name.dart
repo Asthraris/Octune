@@ -1,58 +1,45 @@
-/// Twelve chromatic pitch classes. Index 0 is C (MIDI pitch class).
-enum NoteName {
-  c,
-  cSharp,
-  d,
-  dSharp,
-  e,
-  f,
-  fSharp,
-  g,
-  gSharp,
-  a,
-  aSharp,
-  b;
+/// The 12 chromatic pitch classes, in semitone order starting at C.
+enum NoteName { c, cSharp, d, dSharp, e, f, fSharp, g, gSharp, a, aSharp, b }
 
-  /// Canonical JSON / MIDI spelling (always sharps): C, C#, D, …
-  String get jsonName {
-    return switch (this) {
-      NoteName.c => 'C',
-      NoteName.cSharp => 'C#',
-      NoteName.d => 'D',
-      NoteName.dSharp => 'D#',
-      NoteName.e => 'E',
-      NoteName.f => 'F',
-      NoteName.fSharp => 'F#',
-      NoteName.g => 'G',
-      NoteName.gSharp => 'G#',
-      NoteName.a => 'A',
-      NoteName.aSharp => 'A#',
-      NoteName.b => 'B',
-    };
-  }
+/// How black-key notes are spelled everywhere in the app (decided once).
+enum AccidentalPreference { sharps, flats }
 
-  static NoteName fromPitchClass(int pitchClass) {
-    return NoteName.values[((pitchClass % 12) + 12) % 12];
-  }
+const List<String> _sharpNames = [
+  'C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B',
+];
+const List<String> _flatNames = [
+  'C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B',
+];
+const List<String> _asciiSharp = [
+  'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
+];
+const List<String> _asciiFlat = [
+  'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B',
+];
 
-  static NoteName fromMidi(int midiNumber) => fromPitchClass(midiNumber);
+extension NoteNameX on NoteName {
+  /// 0 = C ... 11 = B.
+  int get pitchClass => index;
 
-  /// Parses canonical sharp names and flat aliases (`A#`, `Bb`, `A♯`, `B♭`).
-  static NoteName parse(String value) {
-    return switch (value) {
-      'C' => NoteName.c,
-      'C#' || 'C♯' || 'Db' || 'D♭' => NoteName.cSharp,
-      'D' => NoteName.d,
-      'D#' || 'D♯' || 'Eb' || 'E♭' => NoteName.dSharp,
-      'E' => NoteName.e,
-      'F' => NoteName.f,
-      'F#' || 'F♯' || 'Gb' || 'G♭' => NoteName.fSharp,
-      'G' => NoteName.g,
-      'G#' || 'G♯' || 'Ab' || 'A♭' => NoteName.gSharp,
-      'A' => NoteName.a,
-      'A#' || 'A♯' || 'Bb' || 'B♭' => NoteName.aSharp,
-      'B' => NoteName.b,
-      _ => throw FormatException('Unknown note name', value),
-    };
-  }
+  bool get isAccidental => const <int>{1, 3, 6, 8, 10}.contains(index);
+
+  /// Canonical storage name (always sharps, ASCII). Used in JSON.
+  String get asciiName => _asciiSharp[index];
+
+  /// Display name honoring the user's sharp/flat preference.
+  String displayName(AccidentalPreference preference) =>
+      preference == AccidentalPreference.sharps
+          ? _sharpNames[index]
+          : _flatNames[index];
+}
+
+NoteName noteNameFromPitchClass(int pitchClass) =>
+    NoteName.values[((pitchClass % 12) + 12) % 12];
+
+/// Parses "C", "C#", "Db", ... Throws [ArgumentError] on unknown input.
+NoteName noteNameFromAscii(String text) {
+  var i = _asciiSharp.indexOf(text);
+  if (i < 0) i = _asciiFlat.indexOf(text);
+  if (i < 0) throw ArgumentError.value(text, 'text', 'Unknown note name');
+  return NoteName.values[i];
 }

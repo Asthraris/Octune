@@ -1,138 +1,154 @@
-import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:octune/domain/note_math.dart';
-import 'package:octune/engine/pitch_analysis.dart';
-import 'package:octune/engine/pitch_estimate.dart';
 import 'package:octune/engine/yin_pitch_detector.dart';
 
-const int _sampleRate = 44100;
+import '../helpers/signals.dart';
 
 void main() {
-  final YinPitchDetector detector = YinPitchDetector(
-    minHz: 70,
-    maxHz: 2000,
-  );
-
-  PitchEstimate? estimate(Float32List samples) {
-    return detector.analyze(samples, _sampleRate).estimate;
-  }
-
-  test('sines within 0.5% at 44.1 kHz', () {
-    const List<double> frequencies = <double>[
-      82.4,
-      110,
-      220,
-      440,
-      880,
-      1318,
-    ];
-    for (final double hz in frequencies) {
-      final PitchEstimate? got = estimate(_sine(hz));
-      expect(got, isNotNull, reason: '$hz Hz returned null');
-      final double error = (got!.frequencyHz - hz).abs() / hz;
-      expect(
-        error,
-        lessThan(0.005),
-        reason: '$hz Hz -> ${got.frequencyHz} Hz (${error * 100}%)',
-      );
+  group('YinPitchDetector accuracy', () {
+    for (final f in [82.41, 110.0, 220.0, 440.0, 880.0, 1318.51]) {
+      test('pure sine $f Hz within 0.5%', () {
+        final d = YinPitchDetector();
+        final est = d.analyze(sine(f), kSampleRate).estimate;
+        expect(est, isNotNull);
+        expect((est!.frequencyHz - f).abs() / f, lessThan(0.005));
+        expect(est.clarity, greaterThan(0.9));
+      });
     }
-  });
 
-  test('harmonic series returns the fundamental, not an octave up', () {
-    const double f0 = 220;
-    final Float32List samples = _harmonicTone(
-      f0,
-      amplitudes: const <double>[1, 0.5, 0.33],
-    );
-    final PitchEstimate? got = estimate(samples);
-    expect(got, isNotNull);
-    expect((got!.frequencyHz - f0).abs() / f0, lessThan(0.005));
-    expect(got.frequencyHz, lessThan(f0 * 1.5));
-  });
-
-  test('silence returns null estimate', () {
-    expect(estimate(Float32List(2048)), isNull);
-  });
-
-  test('white noise returns null estimate', () {
-    expect(estimate(_whiteNoise(seed: 1)), isNull);
-    expect(estimate(_whiteNoise(seed: 2)), isNull);
-    expect(estimate(_whiteNoise(seed: 3)), isNull);
-  });
-
-  test('salience peaks in the correct semitone bin', () {
-    const double hz = 440;
-    final PitchAnalysis analysis = detector.analyze(_sine(hz), _sampleRate);
-    expect(analysis.estimate, isNotNull);
-    var peakBin = 0;
-    var peak = analysis.salienceBySemitone[0];
-    for (var i = 1; i < analysis.salienceBySemitone.length; i++) {
-      if (analysis.salienceBySemitone[i] > peak) {
-        peak = analysis.salienceBySemitone[i];
-        peakBin = i;
+    test('arbitrary phase does not matter', () {
+      final d = YinPitchDetector();
+      for (final p in [0.0, 1.0, 2.5, 4.0]) {
+        final est = d.analyze(sine(330, phase: p), kSampleRate).estimate;
+        expect(est, isNotNull);
+        expect((est!.frequencyHz - 330).abs() / 330, lessThan(0.005));
       }
-    }
-    final int peakMidi = analysis.salienceLowestMidi + peakBin;
-    expect(peakMidi, frequencyToMidi(hz).round());
+    });
   });
 
-  test('benchmark ms per frame', () {
-    final Float32List samples = _sine(440);
-    const int frames = 40;
-    detector.analyze(samples, _sampleRate);
-    final Stopwatch watch = Stopwatch()..start();
-    for (var i = 0; i < frames; i++) {
-      detector.analyze(samples, _sampleRate);
-    }
-    watch.stop();
-    final double msPerFrame = watch.elapsedMicroseconds / frames / 1000;
-    stdout.writeln('YIN ms/frame: ${msPerFrame.toStringAsFixed(3)}');
-    expect(msPerFrame, greaterThan(0));
+  group('YinPitchDetector harmonics', () {
+    test('guitar-like spectrum returns the fundamental, not an octave up', () {
+      final d = YinPitchDetector();
+      for (final f in [110.0, 196.0, 329.63]) {
+        final est = d
+            .analyze(harmonicTone(f, [1, 0.8, 0.6, 0.4, 0.3]), kSampleRate)
+            .estimate;
+        expect(est, isNotNull, reason: '$f');
+        expect((est!.frequencyHz - f).abs() / f, lessThan(0.005), reason: '$f');
+      }
+    });
+
+    test('moderately strong 2nd harmonic still gives the fundamental', () {
+      final d = YinPitchDetector();
+      final est =
+          d.analyze(harmonicTone(220, [0.5, 1.0]), kSampleRate).estimate;
+      expect(est, isNotNull);
+      expect((est!.frequencyHz - 220).abs() / 220, lessThan(0.005));
+    });
+
+    test('weak fundamental (0.2 vs 1.0): documented behaviour', () {
+      // KNOWN LIMIT: when the fundamental is much weaker than the 2nd
+      // harmonic, YIN may legitimately report the octave above. Both answers
+      // are acceptable here; the NoteStabilizer's octave check is the defence.
+      final d = YinPitchDetector();
+      final est =
+          d.analyze(harmonicTone(220, [0.2, 1.0]), kSampleRate).estimate;
+      expect(est, isNotNull);
+      final f = est!.frequencyHz;
+      final nearF0 = (f - 220).abs() / 220 < 0.005;
+      final nearOctave = (f - 440).abs() / 440 < 0.005;
+      expect(nearF0 || nearOctave, isTrue, reason: 'got $f');
+      // ignore: avoid_print
+      print('        (weak-fundamental case returned ${f.toStringAsFixed(1)} Hz)');
+    });
   });
-}
 
-Float32List _sine(double hz, {int length = 2048}) {
-  final Float32List out = Float32List(length);
-  final double step = 2 * math.pi * hz / _sampleRate;
-  for (var i = 0; i < length; i++) {
-    out[i] = math.sin(step * i);
-  }
-  return out;
-}
+  group('YinPitchDetector rejection', () {
+    test('silence gives no estimate and zero salience', () {
+      final d = YinPitchDetector();
+      final a = d.analyze(silence(), kSampleRate);
+      expect(a.estimate, isNull);
+      expect(a.salienceBySemitone.every((v) => v == 0), isTrue);
+    });
 
-Float32List _harmonicTone(
-  double f0, {
-  required List<double> amplitudes,
-  int length = 2048,
-}) {
-  final Float32List out = Float32List(length);
-  for (var h = 0; h < amplitudes.length; h++) {
-    final double step = 2 * math.pi * f0 * (h + 1) / _sampleRate;
-    final double amp = amplitudes[h];
-    for (var i = 0; i < length; i++) {
-      out[i] += amp * math.sin(step * i);
+    test('white noise gives no estimate', () {
+      final d = YinPitchDetector();
+      for (var seed = 1; seed <= 10; seed++) {
+        final a = d.analyze(whiteNoise(seed: seed), kSampleRate);
+        expect(a.estimate, isNull, reason: 'seed $seed');
+      }
+    });
+
+    test('short frame gives an empty analysis, not a crash', () {
+      final d = YinPitchDetector();
+      final a = d.analyze(sine(440, n: 512), kSampleRate);
+      expect(a.estimate, isNull);
+      expect(a.salienceBySemitone.length, greaterThan(0));
+    });
+  });
+
+  group('YinPitchDetector salience', () {
+    test('peaks in the correct semitone bin', () {
+      final d = YinPitchDetector();
+      for (final entry in {440.0: 69, 220.0: 57, 523.25: 72, 130.81: 48}.entries) {
+        final a = d.analyze(sine(entry.key), kSampleRate);
+        var best = 0;
+        for (var i = 1; i < a.salienceBySemitone.length; i++) {
+          if (a.salienceBySemitone[i] > a.salienceBySemitone[best]) best = i;
+        }
+        expect(a.salienceLowestMidi + best, entry.value, reason: '${entry.key}');
+      }
+    });
+
+    test('values stay within 0..1', () {
+      final d = YinPitchDetector();
+      final a = d.analyze(harmonicTone(196, [1, .5, .3]), kSampleRate);
+      for (final v in a.salienceBySemitone) {
+        expect(v, inInclusiveRange(0, 1));
+      }
+    });
+
+    test('emptyAnalysis has the same shape as a real analysis', () {
+      final d = YinPitchDetector();
+      final real = d.analyze(sine(440), kSampleRate);
+      final empty = d.emptyAnalysis(kSampleRate);
+      expect(empty.salienceBySemitone.length, real.salienceBySemitone.length);
+      expect(empty.salienceLowestMidi, real.salienceLowestMidi);
+      expect(empty.estimate, isNull);
+    });
+
+    test('setFrequencyRange changes the salience range', () {
+      final d = YinPitchDetector();
+      final wide = d.emptyAnalysis(kSampleRate);
+      d.setFrequencyRange(150, 700);
+      final narrow = d.emptyAnalysis(kSampleRate);
+      expect(narrow.salienceBySemitone.length,
+          lessThan(wide.salienceBySemitone.length));
+      expect(narrow.salienceLowestMidi, greaterThan(wide.salienceLowestMidi));
+    });
+
+    test('requested minimum below the window limit is clamped', () {
+      final d = YinPitchDetector(minHz: 30);
+      d.emptyAnalysis(kSampleRate);
+      expect(d.effectiveMinHz, closeTo(kSampleRate / 1024, 0.5));
+    });
+  });
+
+  test('benchmark: ms per 2048-sample frame', () {
+    final d = YinPitchDetector();
+    final frame = harmonicTone(196, [1, .5, .3]);
+    d.analyze(frame, kSampleRate); // warm up
+    const iterations = 200;
+    final sw = Stopwatch()..start();
+    for (var i = 0; i < iterations; i++) {
+      d.analyze(frame, kSampleRate);
     }
-  }
-  var peak = 0.0;
-  for (var i = 0; i < length; i++) {
-    peak = math.max(peak, out[i].abs());
-  }
-  if (peak > 0) {
-    for (var i = 0; i < length; i++) {
-      out[i] /= peak;
-    }
-  }
-  return out;
-}
-
-Float32List _whiteNoise({required int seed, int length = 2048}) {
-  final math.Random rng = math.Random(seed);
-  final Float32List out = Float32List(length);
-  for (var i = 0; i < length; i++) {
-    out[i] = rng.nextDouble() * 2 - 1;
-  }
-  return out;
+    sw.stop();
+    final ms = sw.elapsedMicroseconds / 1000 / iterations;
+    // ignore: avoid_print
+    print('        YIN: ${ms.toStringAsFixed(2)} ms/frame '
+        '(hop budget ${(kHop * 1000 / kSampleRate).toStringAsFixed(1)} ms)');
+    expect(ms, lessThan(math.max(1, kHop * 1000 / kSampleRate)));
+  });
 }

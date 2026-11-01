@@ -1,4 +1,0 @@
-enum AccidentalPreference {
-  sharps,
-  flats,
-}
