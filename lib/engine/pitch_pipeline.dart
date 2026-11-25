@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../domain/analysis_snapshot.dart';
 import '../domain/detector_settings.dart';
+import '../domain/frame_analyzer.dart';
 import '../domain/note_event.dart';
 import '../domain/note_math.dart';
 import 'amplitude_meter.dart';
@@ -22,7 +23,7 @@ import 'yin_pitch_detector.dart';
 ///
 /// Expects fixed-size frames (default 2048) at a steady hop. Timestamps are
 /// in milliseconds from any fixed origin.
-class PitchPipeline {
+class PitchPipeline implements FrameAnalyzer {
   PitchPipeline({
     required PitchDetector detector,
     required SpectrumAnalyzer spectrumAnalyzer,
@@ -78,6 +79,7 @@ class PitchPipeline {
   double get noiseFloorDb => _gate.noiseFloorDb;
 
   /// Applies new settings immediately (A4, gate, confidence, range).
+  @override
   void updateSettings(DetectorSettings settings) {
     _settings = settings.validated();
     _gate.configure(noiseGate: _settings.noiseGate);
@@ -87,12 +89,14 @@ class PitchPipeline {
 
   /// Moves the gate threshold line (UI drag). Returns, and stores in the
   /// settings, the equivalent 0..1 noiseGate value.
+  @override
   double setGateThresholdDb(double db) {
     final g = _gate.setThresholdDb(db);
     _settings = _settings.copyWith(noiseGate: g);
     return g;
   }
 
+  @override
   void reset() {
     _gate.reset();
     _stabilizer.reset();
@@ -102,6 +106,7 @@ class PitchPipeline {
     _lastClarity = 0;
   }
 
+  @override
   AnalysisSnapshot process(Float32List frame, int sampleRate, int timestampMs) {
     if (_work.length != frame.length) _work = Float32List(frame.length);
     removeDcOffset(frame, _work);

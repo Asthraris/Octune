@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for microphone access -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:label="octune"
         android:name="${applicationName}"

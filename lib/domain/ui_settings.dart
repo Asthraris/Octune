@@ -1,10 +1,11 @@
 import 'note_name.dart';
 
-final class UiSettings {
+/// Presentation preferences.
+class UiSettings {
   const UiSettings({
     this.accidentalPreference = AccidentalPreference.sharps,
     this.showCents = true,
-    this.keepScreenAwake = false,
+    this.keepScreenAwake = true,
     this.reduceMotion = false,
   });
 
@@ -13,22 +14,28 @@ final class UiSettings {
   final bool keepScreenAwake;
   final bool reduceMotion;
 
-  @override
-  bool operator ==(Object other) {
-    return other is UiSettings &&
-        other.accidentalPreference == accidentalPreference &&
-        other.showCents == showCents &&
-        other.keepScreenAwake == keepScreenAwake &&
-        other.reduceMotion == reduceMotion;
-  }
+  UiSettings copyWith({
+    AccidentalPreference? accidentalPreference,
+    bool? showCents,
+    bool? keepScreenAwake,
+    bool? reduceMotion,
+  }) =>
+      UiSettings(
+        accidentalPreference: accidentalPreference ?? this.accidentalPreference,
+        showCents: showCents ?? this.showCents,
+        keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
+        reduceMotion: reduceMotion ?? this.reduceMotion,
+      );
 
   @override
-  int get hashCode {
-    return Object.hash(
-      accidentalPreference,
-      showCents,
-      keepScreenAwake,
-      reduceMotion,
-    );
-  }
+  bool operator ==(Object other) =>
+      other is UiSettings &&
+      other.accidentalPreference == accidentalPreference &&
+      other.showCents == showCents &&
+      other.keepScreenAwake == keepScreenAwake &&
+      other.reduceMotion == reduceMotion;
+
+  @override
+  int get hashCode =>
+      Object.hash(accidentalPreference, showCents, keepScreenAwake, reduceMotion);
 }
